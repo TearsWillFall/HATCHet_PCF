@@ -1,9 +1,12 @@
+import pandas as pd
+import numpy as np
+import os
 from hatchet.utils.Supporting import ensure, log, error
 
 
 def findNeutralCluster(seg,tD):
     selected={}
-    for id, df in seg.groupby('CLUSTER'):
+    for id, df in seg.groupby('ID'):
         if all(abs(0.5-df["BAF"])<=tD):
             selected[id]=df["SIZE"].unique()
     if len(selected) == 0:

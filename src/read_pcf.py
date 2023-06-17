@@ -29,7 +29,9 @@ def read_bb(bbfile, subset=None):
     1 track per sample for a single chromosome arm.
     """
 
-    bb = pd.read_table(bbfile)
+    bb = pd.read_csv(bbfile,sep=",")
+    bb=bb.dropna()
+    bb["BETA"]=bb["BAF"]
     bb["BAF"]=bb["BETA"]/(1+bb["BETA"])
     bb["SIZE"]=bb["END"]-bb["START"]
     bb["CHR_ARM"]=bb["CHR"]+"_"+bb["ARM"]
@@ -42,6 +44,8 @@ def read_bb(bbfile, subset=None):
     populated_labels = False
 
     chr_labels = []
+    gene_labels = []
+
     for ch, df0 in bb.groupby('CHR_ARM'):
         df0 = df0.sort_values('START')
         arrs=[]
@@ -49,13 +53,14 @@ def read_bb(bbfile, subset=None):
             df = df.sort_values('SAMPLE')
             if not populated_labels:
                 sample_labels.append(sample)
-              
+        
             arrs.append(df.BAF.to_numpy())
             arrs.append(df.RDR.to_numpy())
     
-            if len(arrs) > 0:
-                tracks.append(np.array(arrs))
-                chr_labels.append(str(ch))
+        if len(arrs) > 0:
+            tracks.append(np.array(arrs))
+            chr_labels.append(str(ch))
+            
         
 
         populated_labels = True

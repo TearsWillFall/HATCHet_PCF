@@ -13,7 +13,7 @@ def execute_solver(
     cn_max=None,
     mu=0.1,
     dT=0.1,
-    ampdel=FALSE,
+    ampdel=False,
     n_seed=10,
     n_worker=6,
     random_seed=None,
@@ -22,7 +22,6 @@ def execute_solver(
 ):
 
     bbc_out_file = outprefix + '.bbc.ucn.tsv'
-
 
     obj, cA, cB, u, cluster_ids, sample_ids = solve_pcf(
         solver=solver,
@@ -100,17 +99,17 @@ def segmentation(
 def runningTetraploid(
     outprefix,
     df,
-    minC=2, 
-    maxC=12, 
     clonal,
     scale,
+    minC=2, 
+    maxC=12, 
     solver='gurobi',
     solve_mode='cd',
     d=-1,
     cn_max=None,
     mu=0.1,
     dT=0.1,
-    ampdel=FALSE,
+    ampdel=False,
     n_seed=10,
     n_worker=6,
     random_seed=None,
@@ -127,6 +126,58 @@ def runningTetraploid(
     obj={}
     for n in range(minC, maxC + 1):
         outprefix = os.path.join(rundir, 'results.tetraploid.n{}'.format(n))
+        
+        obj[n]=execute_solver(
+                    outprefix=outprefix,
+                    df=df,
+                    clonal=cn,
+                    solver=solver,
+                    solve_mode=solve_mode,
+                    d=d,
+                    cn_max=cn_max,
+                    mu=mu,
+                    dT=dT,
+                    ampdel=ampdel,
+                    n_seed=n_seed,
+                    n_worker=n_worker,
+                    random_seed=random_seed,
+                    max_iters=max_iters,
+                    timelimit=timelimit
+        )
+
+    return obj
+
+
+def runningDiploid(
+    outprefix,
+    df,
+    clonal=None,
+    neutral=None,
+    minC=2, 
+    maxC=12, 
+    solver='gurobi',
+    solve_mode='cd',
+    d=-1,
+    cn_max=None,
+    mu=0.1,
+    dT=0.1,
+    ampdel=False,
+    n_seed=10,
+    n_worker=6,
+    random_seed=None,
+    max_iters=None,
+    timelimit=None,
+    rundir=None
+):
+
+    if clonal is not None:
+        cn = clonal
+    else:
+        cn = '{}:1:1'.format(neutral)
+
+    obj={}
+    for n in range(minC, maxC + 1):
+        outprefix = os.path.join(rundir, 'results.diploid.n{}'.format(n))
         
         obj[n]=execute_solver(
                     outprefix=outprefix,

@@ -1,5 +1,6 @@
 from collections import Counter
 import numpy as np
+import os
 import pandas as pd
 
 from sklearn.preprocessing import StandardScaler
@@ -11,32 +12,48 @@ from hmmlearn import hmm
 from hatchet.utils.ArgParsing import parse_cluster_bins_args
 import hatchet.utils.Supporting as sp
 
-import read_pcf
-
+from read_pcf import read_bb
 
 def cluster_bins(
     bbfile,
-    args
+    minK=2,
+    maxK=30,
+    covar="diag",
+    decode_alg="viterbi",
+    tmat="diag",
+    tau=10e-6,
+    restarts=10,
+    subset=None,
+    rundir=""
 ):
-    tracks, bb, sample_labels, chr_labels =read_pcf(bbfile,args['subset'])
+    tracks, bb, sample_labels, chr_labels =read_bb(bbfile,subset=subset)
 
-    bb.to_csv(args['outbbc'], index=False, sep='\t')
+    outbb= os.path.join(rundir, 'output.bbc')
+
+    bb.to_csv(outbb,index=False, sep=',')
+
+    if minK==None:
+        minK=len(chr_labels)
+    elif maxK==None:
+        maxK=len(bb.GENE.unique())
 
     (best_score, best_model, best_labels, best_K, results) =hmm_model_select(
             tracks,
-            minK=args['minK'],
-            maxK=args['maxK'],
-            covar=args['covar'],
-            decode_alg=args['decoding'],
-            tmat=args['transmat'],
-            tau=args['tau'],
-            restarts=args['restarts'],
+            minK=minK,
+            maxK=maxK,
+            covar=covar,
+            decode_alg=decode_alg,
+            tmat=tmat,
+            tau=tau,
+            restarts=restarts,
         )
 
     best_labels = reindex(best_labels)
     bb['CLUSTER'] = np.repeat(best_labels, len(sample_labels))
     seg = form_seg(bb)
-    seg.to_csv(args['outsegments'], index=False, sep='\t')
+    outseg= os.path.join(rundir, 'output.seg')
+    seg.to_csv(outseg, index=False, sep='\t')
+
     return seg
 
 
@@ -127,6 +144,50 @@ def hmm_model_select(tracks, minK=20, maxK=50, tau=10e-6, tmat='diag', decode_al
     return best_score, best_model, best_labels, best_K, rs
 
 
+class DiagGHMM(hmm.GaussianHMM):
+    def _accumulate_sufficient_statistics(self, stats, obs, framelogprob, posteriors, fwdlattice, bwdlattice):
+        super()._accumulate_sufficient_statistics(stats, obs, framelogprob, posteriors, fwdlattice, bwdlattice)
+
+        if 't' in self.params:
+            # for each ij, recover sum_t xi_ij from the inferred transition matrix
+            bothlattice = fwdlattice + bwdlattice
+            loggamma = (bothlattice.T - logsumexp(bothlattice, axis=1)).T
+
+            # denominator for each ij is the sum of gammas over i
+            denoms = np.sum(np.exp(loggamma), axis=0)
+            # transpose to perform row-wise multiplication
+            stats['denoms'] = denoms
+
+    def _do_mstep(self, stats):
+        super()._do_mstep(stats)
+        if 't' in self.params:
+
+            denoms = stats['denoms']
+            x = (self.transmat_.T * denoms).T
+
+            # numerator is the sum of ii elements
+            num = np.sum(np.diag(x))
+            # denominator is the sum of all elements
+            denom = np.sum(x)
+
+            # (this is the same as sum_i gamma_i)
+            # assert np.isclose(denom, np.sum(denoms))
+
+            stats['diag'] = num / denom
+            # print(num.shape)
+            # print(denom.shape)
+
+            self.transmat_ = self.form_transition_matrix(stats['diag'])
+
+    def form_transition_matrix(self, diag):
+        tol = 1e-10
+        diag = np.clip(diag, tol, 1 - tol)
+
+        offdiag = (1 - diag) / (self.n_components - 1)
+        transmat_ = np.diag([diag - offdiag] * self.n_components)
+        transmat_ += offdiag
+        # assert np.all(transmat_ > 0), (diag, offdiag, transmat_)
+        return transmat_
 
 
 
