@@ -2,7 +2,7 @@
 import os
 import numpy as np
 import pandas as pd
-from pyomo import environ as pe
+from pyomo.environ import *
 from collections import OrderedDict
 
 from hatchet.utils.solve.ilp_subset import ILPSubset, ILPSubsetSplit
@@ -15,11 +15,9 @@ def solver_available(solver=None):
     solver = solver or config.compute_cn.solver
     if solver == 'cpp':
         return os.getenv('GRB_LICENSE_FILE') is not None
-    elif solver == 'gurobipy':
-        return pe.SolverFactory('gurobi', solver_io='python').available(exception_flag=False)
-    return pe.SolverFactory(solver).available(exception_flag=False)
-
-
+    elif solver == 'gurobi' or solver == "gurobipy":
+        return SolverFactory('gurobi', solver_io='python').available(exception_flag=False)
+    return SolverFactory(solver).available(exception_flag=False)
 
 def solve_pcf(
     n,

@@ -120,7 +120,7 @@ def arg_parse(args=None):
    
     parser.add_argument(
         '-f',
-        '--noampdel',
+        '--ampdel',
         action='store_true',
         default=False,
         required=False,
@@ -272,8 +272,8 @@ def arg_parse(args=None):
         '--jobs',
         type=int,
         required=False,
-        default=None,
-        help='Number of parallel jobs (default: maximum available on the machine)',
+        default=1,
+        help='Number of parallel jobs (default: 1)',
     )
 
     parser.add_argument(
@@ -305,7 +305,7 @@ def arg_parse(args=None):
     return args
 
 def main():
-    args=arg_parse()
+    args=vars(arg_parse())
     compute_cn_pcf(
         bbfile=args["bbfile"],
         minK=args["minK"],

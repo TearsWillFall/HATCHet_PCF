@@ -45,14 +45,15 @@ def select(
   
     tchosen = max(tetraploid, key=(lambda x: tscores[x]))
     tbout = os.path.join(rundir, 'chosen.tetraploid.bbc.ucn')
-    shutil.copy2("results.tetraploid.n"+str(tchosen) + '.bbc.ucn.tsv', tbout)
+    shutil.copy2(os.path.join(rundir,"results.tetraploid.n"+str(tchosen) + '.bbc.ucn.tsv'), tbout)
   
 
     bbest = os.path.join(rundir, 'best.bbc.ucn')
+    
     if tchosen < dchosen:
-        shutil.copy2("results.diploid.n"+str(tchosen)+ '.bbc.ucn.tsv', bbest)
+        shutil.copy2(os.path.join(rundir,"results.diploid.n"+str(tchosen) + '.bbc.ucn.tsv'), bbest)
     
     else:
-        shutil.copy2("results.diploid.n"+str(dchosen)+ '.bbc.ucn.tsv', bbest)
+        shutil.copy2(os.path.join(rundir,"results.diploid.n"+str(dchosen) + '.bbc.ucn.tsv'), bbest)
 
     return dchosen,tchosen
