@@ -20,12 +20,14 @@ def solver_available(solver=None):
     return pe.SolverFactory(solver).available(exception_flag=False)
 
 
+
 def solve_pcf(
     n,
     df,
     clonal=None,
     solver='gurobi',
     solve_mode='cd',
+    wgd=0,
     d=-1,
     cn_max=None,
     mu=0.01,
@@ -74,34 +76,35 @@ def solve_pcf(
     else:
         copy_numbers = parse_clonal(clonal)
 
-    gamma = scale_rdr(rdr, copy_numbers)
-
-    
- 
+    gamma= scale_rdr(rdr, copy_numbers)
 
     rdr = rdr * gamma
     f_a = rdr * baf
     f_b = rdr - f_a
 
     gamma=gamma.to_frame()
+    gamma.columns=["GAMMA"]
+ 
+    df=df.set_index(['ID', 'SAMPLE'])
+  
 
-    seg=seg.set_index(['ID', 'SAMPLE'])
+    df=df.merge(gamma, left_index=True, right_index=True)
+    df = df.reset_index()
 
-    seg=seg.merge(gamma, left_index=True, right_index=True)
+    df['CN']=df['RDR']*df["GAMMA"]
+    df['CN.int']=df['CN'].round()
+    df['fA']=df['CN']*df["BAF"]
+    df['fA.int']=df['fA'].round()
+    df['fB']=df['CN']-df["fA"]
+    df['fB.int']=df['fB'].round()
 
-    seg['CN']=seg['RDR']*seg["GAMMA"]
-    seg['CN.int']=seg['CN'].round()
-    seg['fA']=seg['CN']*seg["BAF"]
-    seg['fA.int']=seg['fA'].round()
-    seg['fB']=seg['CN']-seg["fA"]
-    seg['fB.int']=seg['fB'].round()
 
     if cn_max==None:
-        cn_max=np.ceil(seg['CN'])
-
+        cn_max=np.ceil(df['CN']).max()
+    
 
     sp.log(
-        msg='Maximum copy-numner = \n' + str(cn_max) + '\n',
+        msg='Maximum copy-number = \n' + str(cn_max) + '\n',
         level='INFO',
     )
 
@@ -118,7 +121,7 @@ def solve_pcf(
             w=weights,
         )
         ilp.create_model(pprint=True)
-        return ilp.run(solver_type=solver, timelimit=timelimit)
+        obj, cA, cB, u, cluster_ids, sample_ids=ilp.run(solver_type=solver, timelimit=timelimit)
     elif solve_mode == 'cd':
         cd = CoordinateDescent(
             f_a=f_a,
@@ -131,7 +134,7 @@ def solve_pcf(
             ampdel=ampdel,
             cn=copy_numbers,
         )
-        return cd.run(
+        obj, cA, cB, u, cluster_ids, sample_ids=cd.run(
             solver_type=solver,
             max_iters=max_iters,
             n_seed=n_seed,
@@ -173,5 +176,10 @@ def solve_pcf(
         )
         ilp.create_model()
         ilp.hot_start(cA, cB)
-        return ilp.run(solver_type=solver, timelimit=timelimit)
+        obj, cA, cB, u, cluster_ids, sample_ids=ilp.run(solver_type=solver, timelimit=timelimit)
+    df["WGD"]=wgd
+    df["CLONAL"]=clonal
+    df["N"]=n
+    df["OBJ"]=obj
+    return obj, cA, cB, u, cluster_ids, sample_ids,df
 

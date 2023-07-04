@@ -8,6 +8,7 @@ from sklearn.metrics import silhouette_score
 from scipy.special import logsumexp
 from scipy.spatial.distance import pdist, squareform
 from hmmlearn import hmm
+from util_pcf import silence
 
 from hatchet.utils.ArgParsing import parse_cluster_bins_args
 import hatchet.utils.Supporting as sp
@@ -19,10 +20,11 @@ def cluster_bins(
     minK=2,
     maxK=30,
     covar="diag",
-    decode_alg="viterbi",
+    decode_alg="map",
     tmat="diag",
-    tau=10e-6,
+    tau=0.000001,
     restarts=10,
+    preserve_arm=True,
     subset=None,
     rundir=""
 ):
@@ -34,23 +36,30 @@ def cluster_bins(
 
     if minK==None:
         minK=len(chr_labels)
-    elif maxK==None:
+    if maxK==None:
         maxK=len(bb.GENE.unique())
 
-    (best_score, best_model, best_labels, best_K, results) =hmm_model_select(
-            tracks,
-            minK=minK,
-            maxK=maxK,
-            covar=covar,
-            decode_alg=decode_alg,
-            tmat=tmat,
-            tau=tau,
-            restarts=restarts,
-        )
+    sp.log(
+        msg='Minimum number of gene clusters = \n' + str(minK) + '\n'+
+            'Maximum number of gene clusters = \n' + str(maxK) + '\n',  
+        level='INFO',
+    )
+
+    with silence():
+        (best_score, best_model, best_labels, best_K, results) =hmm_model_select(
+                tracks,
+                minK=minK,
+                maxK=maxK,
+                covar=covar,
+                decode_alg=decode_alg,
+                tmat=tmat,
+                tau=tau,
+                restarts=restarts,
+            )
 
     best_labels = reindex(best_labels)
     bb['CLUSTER'] = np.repeat(best_labels, len(sample_labels))
-    seg = form_seg(bb)
+    seg = form_seg(bb,preserve_arm=preserve_arm)
     outseg= os.path.join(rundir, 'output.seg')
     seg.to_csv(outseg, index=False, sep='\t')
 
@@ -58,7 +67,16 @@ def cluster_bins(
 
 
 
-def hmm_model_select(tracks, minK=20, maxK=50, tau=10e-6, tmat='diag', decode_alg='viterbi', covar='diag', restarts=10):
+def hmm_model_select(
+    tracks, 
+    minK=20,
+    maxK=50, 
+    tau=10e-6,
+    tmat='diag', 
+    decode_alg='viterbi', 
+    covar='diag', 
+    restarts=10
+):
     assert tmat in ['fixed', 'diag', 'free']
     assert decode_alg in ['map', 'viterbi']
 
@@ -213,42 +231,72 @@ def reindex(labels):
     return [old2newf(a) for a in labels]
 
 
-def form_seg(bbc):
+def form_seg(bbc,preserve_arm=True):
     segments = []
-    for key, df_ in bbc.groupby('CLUSTER'):
-        nbins = []
-        size=[]
-        chr = []
-        genes = []
-        rdr = []
-        beta=[]
-        baf = []
-        samples=[]
-
-        for sample, df in df_.groupby('SAMPLE'):
-            size.append(df.SIZE.sum())
-            nbins.append(len(df))
-            chr.append(df.CHR_ARM.unique())
-            genes.append(df.GENE.unique())
-            rdr.append(df.RDR.mean())
-            baf.append(df.BAF.mean())
-            beta.append(df.BETA.mean())
-            samples.append(sample)
-        keys = [key] * len(baf)
-        [segments.append(t) for t in zip(keys,samples,chr,genes,nbins,size, rdr, baf, beta)]
+    if preserve_arm:
+       id=0
+       for ch_arm, df_ in bbc.groupby('CHR_ARM'):
+            for key, df0 in df_.groupby('CLUSTER'):
+                nbins = []
+                size=[]
+                chr = []
+                genes = []
+                rdr = []
+                beta=[]
+                baf = []
+                samples=[]
+                keys=[]
+                for sample, df in df0.groupby('SAMPLE'):
+                    size.append(df.SIZE.sum())
+                    nbins.append(len(df))
+                    chr.append(df.CHR_ARM.unique())
+                    genes.append(df.GENE.unique())
+                    rdr.append(df.RDR.mean())
+                    baf.append(df.BAF.mean())
+                    beta.append(df.BETA.mean())
+                    samples.append(sample)
+                    keys.append(id)
+            
+                [segments.append(t) for t in zip(
+                    keys,samples,chr,genes,nbins,size, rdr, baf, beta)]
+                id=id+1
+           
+    else:
+        for key, df_ in bbc.groupby('CLUSTER'):
+            nbins = []
+            size=[]
+            chr = []
+            genes = []
+            rdr = []
+            beta=[]
+            baf = []
+            samples=[]
+            keys=[]
+            for sample, df in df_.groupby('SAMPLE'):
+                size.append(df.SIZE.sum())
+                nbins.append(len(df))
+                chr.append(df.CHR_ARM.unique())
+                genes.append(df.GENE.unique())
+                rdr.append(df.RDR.mean())
+                baf.append(df.BAF.mean())
+                beta.append(df.BETA.mean())
+                samples.append(sample)
+                keys.append(key)
+           
+            [segments.append(t) for t in zip(keys,samples,chr,genes,nbins,size, rdr, baf, beta)]
 
     seg = pd.DataFrame(
-        segments,
-        columns=[
-            'ID',
-            'SAMPLE',
-            'CHR',
-            'GENES',
-            'BINS',
-            'SIZE',
-            'RDR',
-            'BAF',
-            'BETA'
-        ],
-    )
+            segments,
+            columns=[
+                'ID',
+                'SAMPLE',
+                'CHR',
+                'GENES',
+                'BINS',
+                'SIZE',
+                'RDR',
+                'BAF',
+                'BETA'
+            ],
+        )        
     return seg
